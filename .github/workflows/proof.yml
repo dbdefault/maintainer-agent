@@ -1,0 +1,12 @@
+name: proof
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  characterization:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Characterization, backends and classify
+        run: bash tests/run-characterization.sh run-backends.sh run-classify.sh
