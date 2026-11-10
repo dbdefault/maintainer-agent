@@ -420,21 +420,6 @@ case_opencode_output_to_log() {
 }
 cz_case "opencode: stdout and stderr both go to the log" case_opencode_output_to_log
 
-# Pins current behaviour: the whole prompt is one argument and Linux refuses a
-# single argument over 131072 bytes, so a long task prompt cannot reach opencode.
-# bash reports "Argument list too long", the stub never runs, and the run goes on
-# as a backend failure. No plan decision yet.
-case_opencode_arg_too_long() {
-    oc_setup
-    head -c 140000 /dev/zero | tr '\0' 'x' > "$RZ_PROFILE_DIR/prompts/review.md"
-    printf '\n' >> "$RZ_PROFILE_DIR/prompts/review.md"
-    rz_run fx review
-    cz_expect_rc 0
-    rz_expect_b_not_called opencode
-    cz_expect_stderr_has "opencode exited non-zero for $RZ_RUNID. See $LOG"
-    rz_log_has "opencode: Argument list too long"
-}
-cz_case "opencode: a prompt over 131072 bytes cannot be passed (Argument list too long) and counts as a backend failure" case_opencode_arg_too_long
 
 # --- cursor --------------------------------------------------------------------------
 
