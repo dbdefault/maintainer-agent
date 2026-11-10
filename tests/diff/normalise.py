@@ -47,12 +47,14 @@ class Rule:
 
 RULES = [
     Rule("iso-timestamp",
-         "date -Is, isoformat() and gh timestamps carry the wall clock of the run",
-         r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?",
-         "<TS>",
-         [("started 2026-11-09T12:34:56+00:00 ok", "started <TS> ok"),
-          ("at 2026-11-09 12:34:56.123456Z.", "at <TS>."),
-          ('"recorded_at": "2026-01-01T00:00:00+01:00"', '"recorded_at": "<TS>"')],
+         "date -Is, isoformat() and gh timestamps carry the wall clock of the run; only the digits vary, so the separator, the fraction and the zone suffix stay",
+         r"\d{4}-\d{2}-\d{2}(?P<sep>[T ])\d{2}:\d{2}:\d{2}(?P<frac>\.\d+)?(?P<zone>Z|[+-]\d{2}:?\d{2})?",
+         lambda m: "NNNN-NN-NN%sNN:NN:NN%s%s" % (m.group("sep"), "<FRAC>" if m.group("frac") else "", m.group("zone") or ""),
+         [("started 2026-11-09T12:34:56+00:00 ok", "started NNNN-NN-NNTNN:NN:NN+00:00 ok"),
+          ("at 2026-11-09 12:34:56.123456Z.", "at NNNN-NN-NN NN:NN:NN<FRAC>Z."),
+          ('"recorded_at": "2026-01-01T00:00:00+01:00"', '"recorded_at": "NNNN-NN-NNTNN:NN:NN+01:00"'),
+          ("2026-11-09T12:34:56Z", "NNNN-NN-NNTNN:NN:NN" + "Z"),
+          ("2026-11-09T12:34:56", "NNNN-NN-NNTNN:NN:NN")],
          ["released 2026-11-09", "version 1.2.3", "ratio 12:34"]),
     Rule("stamp-filename",
          "run ids and log names embed the minute the run started",
@@ -84,10 +86,10 @@ RULES = [
          ["tmp.short", "tmp.12345678901234"]),
     Rule("mktemp-dir",
          "verify scratch directories get eight random characters from mktemp -d",
-         r"(verify-work/)[A-Za-z0-9]{8}\b",
+         r"(verify-work/)(?![a-z]{8}\b)[A-Za-z0-9]{8}\b",
          r"\1<RAND>",
          [("<W>/state/verify-work/Xy12AbCd/tree", "<W>/state/verify-work/<RAND>/tree")],
-         ["verify-work/short", "verify-work/"]),
+         ["verify-work/short", "verify-work/", "verify-work/snapshot", "verify-work/baseline"]),
     Rule("key-file",
          "install.sh mints a random 64 hex receipt key; a file holding only that is a key",
          r"\A[0-9a-f]{64}\n?\Z",
@@ -244,10 +246,16 @@ def finalise(work, trees, out):
         else:
             body = norm.text(open(src, "rb").read().decode("utf-8", "replace"))
         write(os.path.join(out, name), body)
+    # Every stub gets all three of its logs, empty when it was never called, so a
+    # call that disappears reads as a changed file and not as a missing one.
     for stub in sorted(os.listdir(os.path.join(work, "stubs"))):
-        log = os.path.join(out, "argv.%s.log" % stub)
-        if not os.path.exists(log):
-            open(log, "w").close()
+        for kind in ("argv", "env", "stdin"):
+            log = os.path.join(out, "%s.%s.log" % (kind, stub))
+            if not os.path.exists(log):
+                open(log, "w").close()
+    calls = os.path.join(out, "calls.log")
+    if not os.path.exists(calls):
+        open(calls, "w").close()
     rows, used = [], {}
     for rel, kind, mode, digest, text in entries(work, norm):
         rows.append((norm.text(rel), kind, mode, digest, text))
